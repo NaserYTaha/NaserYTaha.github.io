@@ -1530,11 +1530,11 @@ section { display: grid; gap: 28px; scroll-margin-top: 80px; }
       el.setAttribute('aria-invalid', 'true'); msg.textContent = m; el.focus();
     }
 
-    var files = [], MAX_FILES = 10, MAX_TOTAL = 25 * 1024 * 1024;
+    var files = [], MAX_FILES = INBOX_URL ? 3 : 10, MAX_TOTAL = INBOX_URL ? 8 * 1024 * 1024 : 25 * 1024 * 1024;
     var fileEl = document.getElementById('req-files'), flist = document.getElementById('req-flist');
     var fnote = document.getElementById('req-fnote'), drop = document.getElementById('req-drop');
-    var NOTE = INBOX_URL ? 'Files are not uploaded here. Only their names are sent. Paste a link below, or send the files by email after I reply.' : 'Files stay on your device. You attach them to your email in the next step.';
-    if (INBOX_URL) { fnote.textContent = NOTE; form.querySelector('button[type=submit]').firstChild.textContent = 'Send my request '; }
+    var NOTE = INBOX_URL ? 'Up to 3 files, 8 MB in total. They are sent privately to me with your request.' : 'Files stay on your device. You attach them to your email in the next step.';
+    if (INBOX_URL) { fnote.textContent = NOTE; form.querySelector('button[type=submit]').firstChild.textContent = 'Send my request '; fileEl.accept = '.pdf,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.step,.stp,.stl,.dwg,.dxf,.sldprt,.sldasm,.ino,.py,.cpp,.c,.h,.json,.md'; }
     function fmt(n) { return n < 1048576 ? Math.max(1, Math.round(n / 1024)) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
     function renderFiles() {
       flist.textContent = '';
@@ -1547,8 +1547,8 @@ section { display: grid; gap: 28px; scroll-margin-top: 80px; }
         b.addEventListener('click', function () { files.splice(i, 1); renderFiles(); });
         li.appendChild(n); li.appendChild(z); li.appendChild(b); flist.appendChild(li);
       });
-      if (total > MAX_TOTAL) { fnote.textContent = 'These files add up to ' + fmt(total) + '. Gmail allows 25 MB per email, so send the large ones as a link instead.'; fnote.className = 'hint warn'; }
-      else if (files.length >= MAX_FILES) { fnote.textContent = 'You can list up to ' + MAX_FILES + ' files. Put the rest in a ZIP.'; fnote.className = 'hint warn'; }
+      if (total > MAX_TOTAL) { fnote.textContent = INBOX_URL ? 'These files add up to ' + fmt(total) + '. The limit is 8 MB, so remove one or paste a link to the large ones below.' : 'These files add up to ' + fmt(total) + '. Gmail allows 25 MB per email, so send the large ones as a link instead.'; fnote.className = 'hint warn'; }
+      else if (files.length >= MAX_FILES) { fnote.textContent = 'You can add up to ' + MAX_FILES + ' files. Put the rest in a ZIP or paste a link.'; fnote.className = 'hint warn'; }
       else { fnote.textContent = NOTE; fnote.className = 'hint'; }
     }
     function addFiles(list) {
@@ -1579,7 +1579,18 @@ section { display: grid; gap: 28px; scroll-margin-top: 80px; }
       [emailEl, areaEl, timeEl, sumEl].forEach(function (x) { x.removeAttribute('aria-invalid'); });
       if (INBOX_URL) {
         var sb = form.querySelector('button[type=submit]'); sb.disabled = true; msg.textContent = 'Sending...';
-        inboxSend({ type: 'request', email: email, area: area, time: time, summary: sum, link: docs, files: files.map(function (f) { return f.name; }).join(', '), website: document.getElementById('hp-req').value }).then(function () {
+        var total = files.reduce(function (n, f) { return n + f.size; }, 0);
+        if (total > MAX_TOTAL) { sb.disabled = false; msg.textContent = 'The files are over 8 MB. Remove one or paste a link instead.'; return; }
+        Promise.all(files.map(function (f) {
+          return new Promise(function (res, rej) {
+            var fr = new FileReader();
+            fr.onload = function () { res({ name: f.name, type: f.type || 'application/octet-stream', data: String(fr.result).split(',')[1] || '' }); };
+            fr.onerror = function () { rej(fr.error); };
+            fr.readAsDataURL(f);
+          });
+        })).then(function (atts) {
+          return inboxSend({ type: 'request', email: email, area: area, time: time, summary: sum, link: docs, attachments: atts, website: document.getElementById('hp-req').value });
+        }).then(function () {
           form.hidden = true;
           var ok = document.createElement('div'); ok.className = 'form-ok'; ok.setAttribute('role', 'status');
           ok.innerHTML = '<strong>Request sent.</strong>Thank you. I will read it and reply to ' + esc(email) + '.';
