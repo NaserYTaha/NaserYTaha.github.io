@@ -420,6 +420,9 @@ section { display: grid; gap: 28px; scroll-margin-top: 80px; }
 .soc:active { transform: translateY(-1px); }
 @media (max-width: 400px) { .socials { gap: 6px; } .soc { width: 42px; height: 42px; } }
 .soc .mk { display: block; width: 20px; height: 20px; background: currentColor; -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
+.hpf { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.form-ok { padding: 18px 20px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; background: var(--surface); }
+.form-ok strong { display: block; margin-bottom: 4px; }
 @media (prefers-reduced-motion: reduce) { .soc, .soc:hover, .soc:focus-visible { transition: none; transform: none; } }
 
 /* graduation photos */
@@ -682,6 +685,7 @@ section { display: grid; gap: 28px; scroll-margin-top: 80px; }
 
       <div class="cb-form">
         <form id="req-form" class="req" novalidate>
+          <div class="hpf" aria-hidden="true"><label>Leave this empty<input id="hp-req" type="text" tabindex="-1" autocomplete="off"></label></div>
           <div class="f-row">
             <div class="f"><label for="req-email">Your email</label><input id="req-email" type="email" autocomplete="email" placeholder="name@company.com" required></div>
             <div class="f"><label for="req-time">Time limit</label>
@@ -789,6 +793,7 @@ section { display: grid; gap: 28px; scroll-margin-top: 80px; }
       </div>
       <div class="cb-form">
         <form id="rv-form" class="req" novalidate>
+          <div class="hpf" aria-hidden="true"><label>Leave this empty<input id="hp-rv" type="text" tabindex="-1" autocomplete="off"></label></div>
           <div class="f-row">
             <div class="f"><label for="rv-name">Your name</label><input id="rv-name" type="text" autocomplete="name" placeholder="Full name" required></div>
             <div class="f"><label for="rv-role">Role and company (optional)</label><input id="rv-role" type="text" placeholder="For example, Project manager at ..."></div>
@@ -1009,6 +1014,11 @@ section { display: grid; gap: 28px; scroll-margin-top: 80px; }
   /* Real reviews only. To add one, put an entry here, for example:
      { name: 'Full Name', role: 'Role, Company', text: 'Their review.', date: 'Month Year' } */
   var REVIEWS = [];
+  /* Private inbox: paste the Google Apps Script web app URL between the quotes. While it is empty, the forms fall back to copy-and-email. */
+  var INBOX_URL = 'https://script.google.com/macros/s/AKfycbzWQnOD8VHOhr_44ZwCrFHCScky-RIuP2DiQZgK8JhzZyhkYKd25b0ADczEBzSElzfr/exec';
+  function inboxSend(data) {
+    return fetch(INBOX_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(data) });
+  }
   var GRAD = [
     { img: 'grad1', shape: 'land', cap: 'On stage at the Atılım University graduation ceremony, 2026', alt: 'Naser Taha in a graduation gown and cap receiving a folder from a woman in academic robes on stage at Atılım University' },
     { img: 'grad2', shape: 'port', cap: 'Graduation ceremony portrait, Atılım University', alt: 'Naser Taha in a graduation gown and cap holding a folder in front of a Mezuniyet Töreni backdrop' }
@@ -1523,7 +1533,8 @@ section { display: grid; gap: 28px; scroll-margin-top: 80px; }
     var files = [], MAX_FILES = 10, MAX_TOTAL = 25 * 1024 * 1024;
     var fileEl = document.getElementById('req-files'), flist = document.getElementById('req-flist');
     var fnote = document.getElementById('req-fnote'), drop = document.getElementById('req-drop');
-    var NOTE = 'Files stay on your device. You attach them to your email in the next step.';
+    var NOTE = INBOX_URL ? 'Files are not uploaded here. Only their names are sent. Paste a link below, or send the files by email after I reply.' : 'Files stay on your device. You attach them to your email in the next step.';
+    if (INBOX_URL) { fnote.textContent = NOTE; form.querySelector('button[type=submit]').firstChild.textContent = 'Send my request '; }
     function fmt(n) { return n < 1048576 ? Math.max(1, Math.round(n / 1024)) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
     function renderFiles() {
       flist.textContent = '';
@@ -1566,6 +1577,18 @@ section { display: grid; gap: 28px; scroll-margin-top: 80px; }
       if (!time) { fail('Choose the time limit for your project.', timeEl); return; }
       if (sum.length < 10) { fail('Add a short summary of your project.', sumEl); return; }
       [emailEl, areaEl, timeEl, sumEl].forEach(function (x) { x.removeAttribute('aria-invalid'); });
+      if (INBOX_URL) {
+        var sb = form.querySelector('button[type=submit]'); sb.disabled = true; msg.textContent = 'Sending...';
+        inboxSend({ type: 'request', email: email, area: area, time: time, summary: sum, link: docs, files: files.map(function (f) { return f.name; }).join(', '), website: document.getElementById('hp-req').value }).then(function () {
+          form.hidden = true;
+          var ok = document.createElement('div'); ok.className = 'form-ok'; ok.setAttribute('role', 'status');
+          ok.innerHTML = '<strong>Request sent.</strong>Thank you. I will read it and reply to ' + esc(email) + '.';
+          form.parentNode.insertBefore(ok, out);
+        }, function () {
+          sb.disabled = false; msg.textContent = 'Could not send. Check your connection and try again, or email me at ' + TO + '.';
+        });
+        return;
+      }
       var subject = 'Project request: ' + area;
       var body = 'Hello Naser,\n\nI found your portfolio and need help with a project.\n\nArea: ' + area +
         '\nTime limit: ' + time + '\nMy email: ' + email + '\n\nProject summary:\n' + sum + (docs ? '\n\nRelated documents: ' + docs : '') + attachText() + '\n';
@@ -1681,6 +1704,7 @@ section { display: grid; gap: 28px; scroll-margin-top: 80px; }
     var form = document.getElementById('rv-form'), out = document.getElementById('rv-out');
     var nameEl = document.getElementById('rv-name'), roleEl = document.getElementById('rv-role'), textEl = document.getElementById('rv-text');
     var msg = document.getElementById('rv-msg'), box = document.getElementById('rv-ttext');
+    if (INBOX_URL) { form.querySelector('button[type=submit]').firstChild.textContent = 'Send my review '; var rp = form.closest('.rvbox').querySelector('.cb-head p'); if (rp) rp.textContent = 'Write a short review. It is sent to me privately and appears on this page after I approve it.'; }
     var copyBtn = document.getElementById('rv-copy'), mail = document.getElementById('rv-mail'), edit = document.getElementById('rv-edit');
     function fail(m, el) {
       [nameEl, textEl].forEach(function (x) { x.removeAttribute('aria-invalid'); });
@@ -1692,6 +1716,18 @@ section { display: grid; gap: 28px; scroll-margin-top: 80px; }
       if (name.length < 2) { fail('Enter your name.', nameEl); return; }
       if (text.length < 20) { fail('Write at least a couple of sentences.', textEl); return; }
       [nameEl, textEl].forEach(function (x) { x.removeAttribute('aria-invalid'); });
+      if (INBOX_URL) {
+        var rb = form.querySelector('button[type=submit]'); rb.disabled = true; msg.textContent = 'Sending...';
+        inboxSend({ type: 'review', name: name, role: role, text: text, website: document.getElementById('hp-rv').value }).then(function () {
+          form.hidden = true;
+          var ok = document.createElement('div'); ok.className = 'form-ok'; ok.setAttribute('role', 'status');
+          ok.innerHTML = '<strong>Thank you, ' + esc(name) + '.</strong>Your review was sent to me. It will appear on this page after I approve it.';
+          form.parentNode.insertBefore(ok, out);
+        }, function () {
+          rb.disabled = false; msg.textContent = 'Could not send. Check your connection and try again.';
+        });
+        return;
+      }
       var subject = 'Review for Naser Taha from ' + name;
       var body = 'Hello Naser,\n\nHere is my review for your portfolio.\n\nName: ' + name + (role ? '\nRole and company: ' + role : '') + '\n\nReview:\n' + text + '\n\nI agree that you may publish this review with my name on your portfolio.\n';
       box.value = 'To: ' + TO + '\nSubject: ' + subject + '\n\n' + body;
@@ -1737,6 +1773,11 @@ section { display: grid; gap: 28px; scroll-margin-top: 80px; }
   renderList();
   renderReviews();
   renderGrad();
+  if (INBOX_URL) {
+    fetch(INBOX_URL + '?action=reviews').then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.reviews && d.reviews.length) { REVIEWS = REVIEWS.concat(d.reviews); renderReviews(); setupReveal(document.getElementById('rvlist')); }
+    }).catch(function () {});
+  }
   hero.init();
   apply(parse(location.hash));
 })();
